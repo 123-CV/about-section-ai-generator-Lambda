@@ -10,6 +10,7 @@ logger.setLevel(logging.DEBUG)
 # Set up OpenAI API credentials
 openai_api_key = os.environ['openai']
 
+
 def lambda_handler(event, context):
     logging.info("In handler method")
     text = event['text']
