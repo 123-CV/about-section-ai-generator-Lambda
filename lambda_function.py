@@ -1,43 +1,55 @@
 import json
-import openai
 import logging
 import os
 import boto3
+import openai
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 
 # Set up OpenAI API credentials
-openai_api_key = os.environ['openai']
+openai_api_key = os.environ.get('openai')
 
 lambda_client = boto3.client('lambda')
 
 def lambda_handler(event, context):
     logging.info("In handler method")
-    #  Get the text from the incoming event
-    logger.info("Populating user data variables")
-    
-    body = event['body']
-    
-    logger.info(f"Calling get_user_data function with body: {body}")
-    response = get_user_data(body)
-    logger.info(f"Response from aggregator function: {response}")
-    
-    return {
-        "statusCode": 200,
-        "body": {
-            "messageId": event['body']['messageId'],
-            "chatId": event['body']['chatId'],
-            "userId": event['body']['userId'],
-            "message": response,
-            "replyId": event['body']['replyId'],
-            "isCommand": event['body']['isCommand'],
-            "type": event['body']['type'],
-            "state": event['body']['state']
-  }
-
-    }
+    try:
+        # Get the text from the incoming event
+        body = event.get('body', {})
+        if not body:
+            raise ValueError('No body provided in the event')
+        
+        # Check if required fields are present in the body
+        required_fields = ['messageId', 'chatId', 'userId', 'replyId', 'isCommand', 'type', 'state']
+        missing_fields = [field for field in required_fields if field not in body]
+        if missing_fields:
+            raise ValueError(f'Missing required fields in body: {missing_fields}')
+        
+        logger.info("Calling get_user_data function")
+        response = get_user_data(body)
+        logger.info(f"Response from aggregator function: {response}")
+        
+        return {
+            "statusCode": 200,
+            "body": {
+                "messageId": body.get('messageId'),
+                "chatId": body.get('chatId'),
+                "userId": body.get('userId'),
+                "message": response,
+                "replyId": body.get('replyId'),
+                "isCommand": body.get('isCommand'),
+                "type": body.get('type'),
+                "state": body.get('state')
+            }
+        }
+    except Exception as e:
+        logging.error(f"Error occurred: {str(e)}")
+        return {
+            "statusCode": 500,
+            "body": {"error": str(e)}
+        }
 
 def get_user_data(body):
     logger.info("In get_user_data function")
@@ -59,22 +71,28 @@ def get_user_data(body):
     response_payload = json.loads(response['Payload'].read().decode("utf-8"))
     logger.info(f"Response payload from aggregator function: \n{response_payload}")
     
-    payload_body = json.loads(response_payload['body'])
+    payload_body = json.loads(response_payload.get('body', {}))
+    
+    # Check if required fields are present in the response
+    required_fields = ['user', 'lang', 'edu', 'exp', 'skill']
+    missing_fields = [field for field in required_fields if field not in payload_body]
+    if missing_fields:
+        raise ValueError(f'Missing required fields in aggregator function response: {missing_fields}')
     
     logger.info("pulling user data from response payload")
     user = payload_body['user']
     logger.info(f"User: \n{user}")
     
-    name = user['userName']
+    name = user.get('userName')
     
     # language
-    language = payload_body['lang'][0]
+    language = payload_body['lang'][0] if payload_body['lang'] else ''
     
     # school
-    education = payload_body['edu'][0]
-    school = education['schoolName']
-    graduation_year = education['graduationYear']
-    achievements = education['achievementList']
+    education = payload_body['edu'][0] if payload_body['edu'] else {}
+    school = education.get('schoolName')
+    graduation_year = education.get('graduationYear')
+    achievements = education.get('achievementList', [])
     
     # experience
     experience = payload_body['exp'][0]
